@@ -2,6 +2,10 @@
 
 #include "mainwindow.h"
 #include "finddialog.h"
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QInputDialog>
+#include <QScrollBar>
 
 MainWindow::MainWindow()
 {
@@ -13,6 +17,8 @@ MainWindow::MainWindow()
     documentModified=false;
     initMenus();
     initToolBars();
+    setupScrollControls();
+    setupTransposeButton();
     //initContext();
 }
 void MainWindow::initMenus()
@@ -163,6 +169,122 @@ void MainWindow::initToolBars()
     toolBar->setVisible(true);
     connect(toolEditAction,SIGNAL(toggled(bool)),toolBar,SLOT(setVisible(bool)));
 }
+
+void MainWindow::setupScrollControls()
+{
+    playButton = new QPushButton(QIcon(":/images/play.png"), "", this);
+    pauseButton = new QPushButton(QIcon(":/images/pause.png"), "", this);
+    stopButton = new QPushButton(QIcon(":/images/stop.png"), "", this);
+    speedSlider = new QSlider(Qt::Horizontal, this);
+
+    playButton->setToolTip("Play");
+    pauseButton->setToolTip("Pause");
+    stopButton->setToolTip("Stop");
+    speedSlider->setToolTip("Adjust scroll speed");
+
+    speedSlider->setRange(5, 18);  // 5 to 18 lines per 10 seconds
+    speedSlider->setValue(10);  // Default speed
+    speedSlider->setMinimumWidth(200);  // Make the slider longer
+
+    connect(playButton, &QPushButton::clicked, this, &MainWindow::startScroll);
+    connect(pauseButton, &QPushButton::clicked, this, &MainWindow::pauseScroll);
+    connect(stopButton, &QPushButton::clicked, this, &MainWindow::stopScroll);
+    connect(speedSlider, &QSlider::valueChanged, this, &MainWindow::updateScrollSpeed);
+
+    QWidget* scrollWidget = new QWidget(this);
+    QHBoxLayout* scrollLayout = new QHBoxLayout(scrollWidget);
+    scrollLayout->addWidget(playButton);
+    scrollLayout->addWidget(pauseButton);
+    scrollLayout->addWidget(stopButton);
+    scrollLayout->addWidget(speedSlider);
+    scrollLayout->addStretch();
+
+    toolBar->addWidget(scrollWidget);
+
+    scrollTimer = new QTimer(this);
+    connect(scrollTimer, &QTimer::timeout, this, &MainWindow::scrollText);
+    scrollSpeed = 10;  // Default speed (10 lines per 10 seconds)
+}
+
+void MainWindow::setupTransposeButton()
+{
+    transposeButton = new QPushButton("Transpose", this);
+    connect(transposeButton, &QPushButton::clicked, this, &MainWindow::transposeChords);
+    toolBar->addWidget(transposeButton);
+}
+
+void MainWindow::startScroll()
+{
+    scrollTimer->start(1000);  // Update every second
+}
+
+void MainWindow::pauseScroll()
+{
+    scrollTimer->stop();
+}
+
+void MainWindow::stopScroll()
+{
+    scrollTimer->stop();
+    textArea->verticalScrollBar()->setValue(0);
+}
+
+void MainWindow::updateScrollSpeed(int value)
+{
+    scrollSpeed = value;
+}
+
+void MainWindow::scrollText()
+{
+    QScrollBar* vScrollBar = textArea->verticalScrollBar();
+    int newValue = vScrollBar->value() + scrollSpeed / 10;
+    if (newValue <= vScrollBar->maximum()) {
+        vScrollBar->setValue(newValue);
+    } else {
+        stopScroll();
+    }
+}
+
+void MainWindow::transposeChords()
+{
+    QStringList options;
+    for (int i = -7; i <= 7; ++i) {
+        if (i == 0) continue;
+        options << QString("%1%2").arg(i > 0 ? "+" : "").arg(i);
+    }
+
+    bool ok;
+    QString selection = QInputDialog::getItem(this, "Transpose Chords",
+                                              "Select semitones to transpose:",
+                                              options, 0, false, &ok);
+    if (ok && !selection.isEmpty()) {
+        int semitones = selection.toInt();
+        QString text = textArea->toPlainText();
+        QStringList lines = text.split("\n");
+        for (int i = 0; i < lines.size(); ++i) {
+            QStringList words = lines[i].split(" ");
+            for (int j = 0; j < words.size(); ++j) {
+                words[j] = transposeChord(words[j], semitones);
+            }
+            lines[i] = words.join(" ");
+        }
+        textArea->setPlainText(lines.join("\n"));
+    }
+}
+
+QString MainWindow::transposeChord(const QString &chord, int semitones)
+{
+    QStringList notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    QString base = chord.left(1);
+    QString remainder = chord.mid(1);
+    int index = notes.indexOf(base);
+    if (index != -1) {
+        index = (index + semitones + 12) % 12;
+        return notes[index] + remainder;
+    }
+    return chord;
+}
+
 void MainWindow::initContext(){
     this->addAction(cutEditAction);
     this->addAction(copyEditAction);
@@ -177,7 +299,7 @@ void MainWindow::printSlot(){
     QPrinter printer(QPrinter::HighResolution);
     printer.setOutputFormat(QPrinter::PdfFormat);
     printer.setOutputFileName("output.pdf");
-    printer.setOrientation(QPrinter::Portrait);
+    printer.setPageOrientation(QPageLayout::Portrait);
 
     QPrintPreviewDialog preview(&printer,this,Qt::WindowCloseButtonHint|Qt::WindowMaximizeButtonHint);
     connect(&preview,SIGNAL(paintRequested(QPrinter*)),this,SLOT(printPreview(QPrinter*)));
