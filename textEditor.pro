@@ -12,3 +12,13 @@ QT += widgets core printsupport
 HEADERS += finddialog.h mainwindow.h
 SOURCES += finddialog.cpp main.cpp mainwindow.cpp
 RESOURCES += resource.qrc
+
+# Rutas de inclusión y bibliotecas de Qt
+QMAKE_INCDIR += /usr/include/qt5
+QMAKE_LIBDIR += /usr/lib/i386-linux-gnu/qt5
+
+# Agrega tu regla de empaquetado personalizada
+mypackagerule.target = mypackagerule
+mypackagerule.command = exec my_package_script.sh
+QMAKE_EXTRA_TARGETS += mypackagerule
+
